@@ -1,0 +1,97 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: records
+    // Document ID: auto-generated
+    // Fields:
+    //   - id: number (required) - unique ID
+    //   - title: string (optional)
+    //   - first_name: string (required)
+    //   - last_name: string (required)
+    //   - appointment_date: string (optional)
+    //   - position: string (optional)
+    //   - department: string (optional)
+    //   - round1_status: string (optional)
+    //   - round1_start_date: string (optional)
+    //   - round1_end_date: string (optional)
+    //   - round1_score: string (optional)
+    //   - round2_status: string (optional)
+    //   - round2_start_date: string (optional)
+    //   - round2_end_date: string (optional)
+    //   - round2_score: string (optional)
+    //   - chairman: string (optional)
+    //   - committee1: string (optional)
+    //   - committee2: string (optional)
+    //   - committee3: string (optional)
+    //   - committee4: string (optional)
+    //   - secretary: string (optional)
+    //   - created_at: string (optional)
+    //   - uid: string (required) - owner's UID
+    //
+    // Collection: users
+    // Document ID: user UID
+    // Fields:
+    //   - role: string (required) - user's role (admin, user)
+    //   - email: string (required)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isDocOwner() {
+      return isAuthenticated() && request.auth.uid == resource.data.uid;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+          (request.auth.token.email == "pparichata@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function isValidEmail(email) {
+      return email is string &&
+        email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isValidRecord(data) {
+      return data.keys().hasAll(['first_name', 'last_name', 'uid']) &&
+             data.first_name is string && data.first_name.size() > 0 && data.first_name.size() < 100 &&
+             data.last_name is string && data.last_name.size() > 0 && data.last_name.size() < 100 &&
+             data.uid == request.auth.uid;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isAuthenticated() && isOwner(userId) && request.resource.data.role == 'user';
+      allow update: if isAdmin();
+    }
+
+    match /records/{recordId} {
+      allow read: if isAuthenticated() && (isDocOwner() || isAdmin());
+      allow create: if isAuthenticated() && isValidRecord(request.resource.data);
+      allow update: if isAuthenticated() && isValidRecord(request.resource.data) && (isDocOwner() || isAdmin());
+      allow delete: if isAuthenticated() && (isDocOwner() || isAdmin());
+    }
+
+    match /test/connection {
+      allow read: if true;
+    }
+  }
+}

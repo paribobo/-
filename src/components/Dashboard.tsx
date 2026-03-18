@@ -14,8 +14,21 @@ const Dashboard: React.FC = () => {
   const stats = useMemo(() => {
     const total = records.length;
     const passed = records.filter(r => r.round2_status === "ผ่านการประเมิน").length;
-    const pending = records.filter(r => r.round2_status === "รอดำเนินการ").length;
+    const inProgress = records.filter(r => 
+      (r.round1_status === "ดำเนินการแล้ว" || r.round1_status === "ส่งหน้างานแล้ว" || r.round1_status === "ส่งมหาลัยแล้ว") ||
+      (r.round2_status === "ดำเนินการแล้ว" || r.round2_status === "ส่งหน้างานแล้ว" || r.round2_status === "ส่งมหาลัยแล้ว")
+    ).length;
+    const pending = records.filter(r => r.round2_status === "รอดำเนินการ" && !inProgress).length; // This logic is a bit flawed, let's simplify
     const failed = records.filter(r => r.round2_status === "ไม่ผ่านการประเมิน").length;
+
+    // Simplified logic for stats
+    const stats_pending = records.filter(r => r.round1_status === "รอดำเนินการ").length;
+    const stats_in_progress = records.filter(r => 
+      (r.round1_status !== "รอดำเนินการ" && r.round2_status === "รอดำเนินการ") ||
+      (["ดำเนินการแล้ว", "ส่งหน้างานแล้ว", "ส่งมหาลัยแล้ว"].includes(r.round2_status))
+    ).length;
+    const stats_passed = records.filter(r => r.round2_status === "ผ่านการประเมิน").length;
+    const stats_failed = records.filter(r => r.round2_status === "ไม่ผ่านการประเมิน").length;
 
     const today = new Date();
     const overdueRecords = records.filter(r => {
@@ -27,9 +40,10 @@ const Dashboard: React.FC = () => {
 
     // Status Chart Data
     const statusData = [
-      { name: "ผ่านการประเมิน", value: passed, color: "#10B981" },
-      { name: "รอดำเนินการ", value: pending, color: "#6B7280" },
-      { name: "ไม่ผ่าน", value: failed, color: "#EF4444" },
+      { name: "ผ่านการประเมิน", value: stats_passed, color: "#10B981" },
+      { name: "กำลังดำเนินการ", value: stats_in_progress, color: "#06B6D4" },
+      { name: "รอดำเนินการ", value: stats_pending, color: "#6B7280" },
+      { name: "ไม่ผ่าน", value: stats_failed, color: "#EF4444" },
     ].filter(d => d.value > 0);
 
     // Department Chart Data
@@ -44,13 +58,23 @@ const Dashboard: React.FC = () => {
       .sort((a, b) => b.value - a.value)
       .slice(0, 8);
 
-    return { total, passed, pending, failed, overdue, overdueRecords, statusData, deptData };
+    return { 
+      total, 
+      passed: stats_passed, 
+      inProgress: stats_in_progress, 
+      pending: stats_pending, 
+      failed: stats_failed, 
+      overdue, 
+      overdueRecords, 
+      statusData, 
+      deptData 
+    };
   }, [records]);
 
   return (
     <div className="space-y-8">
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
         <StatCard 
           title="พนักงานทั้งหมด" 
           value={stats.total} 
@@ -64,9 +88,15 @@ const Dashboard: React.FC = () => {
           color="bg-emerald-500" 
         />
         <StatCard 
+          title="กำลังดำเนินการ" 
+          value={stats.inProgress} 
+          icon={<Clock size={20} />} 
+          color="bg-cyan-500" 
+        />
+        <StatCard 
           title="รอดำเนินการ" 
           value={stats.pending} 
-          icon={<Clock size={20} />} 
+          icon={<AlertTriangle size={20} />} 
           color="bg-amber-500" 
         />
         <StatCard 

@@ -162,6 +162,7 @@ const RecordModal: React.FC = () => {
                       onChange={e => setFormData({...formData, round1_status: e.target.value})}
                     >
                       <option>รอดำเนินการ</option>
+                      <option>ดำเนินการแล้ว</option>
                       <option>ส่งหน้างานแล้ว</option>
                       <option>ส่งมหาลัยแล้ว</option>
                       <option>ผ่านการประเมิน</option>
@@ -225,6 +226,7 @@ const RecordModal: React.FC = () => {
                       onChange={e => setFormData({...formData, round2_status: e.target.value})}
                     >
                       <option>รอดำเนินการ</option>
+                      <option>ดำเนินการแล้ว</option>
                       <option>ส่งหน้างานแล้ว</option>
                       <option>ส่งมหาลัยแล้ว</option>
                       <option>ผ่านการประเมิน</option>

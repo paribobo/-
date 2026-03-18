@@ -1,0 +1,41 @@
+{
+  "entities": {
+    "AppRecord": {
+      "title": "AppRecord",
+      "description": "A record of an employee's probation performance.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "title": { "type": "string" },
+        "first_name": { "type": "string" },
+        "last_name": { "type": "string" },
+        "appointment_date": { "type": "string" },
+        "position": { "type": "string" },
+        "department": { "type": "string" },
+        "round1_status": { "type": "string" },
+        "round1_start_date": { "type": "string" },
+        "round1_end_date": { "type": "string" },
+        "round1_score": { "type": "string" },
+        "round2_status": { "type": "string" },
+        "round2_start_date": { "type": "string" },
+        "round2_end_date": { "type": "string" },
+        "round2_score": { "type": "string" },
+        "chairman": { "type": "string" },
+        "committee1": { "type": "string" },
+        "committee2": { "type": "string" },
+        "committee3": { "type": "string" },
+        "committee4": { "type": "string" },
+        "secretary": { "type": "string" },
+        "created_at": { "type": "string" },
+        "uid": { "type": "string" }
+      },
+      "required": ["first_name", "last_name", "uid"]
+    }
+  },
+  "firestore": {
+    "/records/{recordId}": {
+      "schema": "AppRecord",
+      "description": "Collection of probation records."
+    }
+  }
+}

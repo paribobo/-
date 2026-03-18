@@ -55,7 +55,9 @@ async function syncToSheet(record: any) {
       record.first_name,
       record.last_name,
       record.position,
+      record.employment_type,
       record.department,
+      record.department_unit,
       record.appointment_date,
       record.round1_status,
       record.round1_start_date,
@@ -143,19 +145,23 @@ async function ensureSheetHeaders() {
       range: `${SHEET_NAME}!A1:Z1`,
     });
 
-    if (!response.data.values || response.data.values.length === 0) {
-      const headers = [
-        "ID", "คำนำหน้า", "ชื่อ", "นามสกุล", "ตำแหน่ง", "สังกัดงาน", "วันที่บรรจุ", 
-        "รอบที่ 1 สถานะ", "รอบที่ 1 เริ่ม", "รอบที่ 1 ถึง",
-        "รอบที่ 2 สถานะ", "รอบที่ 2 เริ่ม", "รอบที่ 2 ถึง",
-        "ประธาน", "กรรมการ 1", "กรรมการ 2", "กรรมการ 3", "กรรมการ 4", "เลขานุการ",
-        "คะแนนรอบ 1", "คะแนนรอบ 2", "สถานะรวม", "วันที่สร้าง"
-      ];
+    const expectedHeaders = [
+      "ID", "คำนำหน้า", "ชื่อ", "นามสกุล", "ตำแหน่ง", "ประเภทการจ้าง", "สังกัดงาน", "สังกัดหน่วย", "วันที่บรรจุ", 
+      "รอบที่ 1 สถานะ", "รอบที่ 1 เริ่ม", "รอบที่ 1 ถึง",
+      "รอบที่ 2 สถานะ", "รอบที่ 2 เริ่ม", "รอบที่ 2 ถึง",
+      "ประธาน", "กรรมการ 1", "กรรมการ 2", "กรรมการ 3", "กรรมการ 4", "เลขานุการ",
+      "คะแนนรอบ 1", "คะแนนรอบ 2", "สถานะรวม", "วันที่สร้าง"
+    ];
+
+    const currentHeaders = response.data.values ? response.data.values[0] : [];
+    const headersMatch = expectedHeaders.every((h, i) => currentHeaders[i] === h);
+
+    if (!headersMatch) {
       await sheets.spreadsheets.values.update({
         spreadsheetId: SPREADSHEET_ID,
         range: `${SHEET_NAME}!A1`,
         valueInputOption: "USER_ENTERED",
-        requestBody: { values: [headers] },
+        requestBody: { values: [expectedHeaders] },
       });
     }
   } catch (error) {
@@ -170,12 +176,12 @@ function resetProbationIds() {
   const resetSeqStmt = db.prepare("DELETE FROM sqlite_sequence WHERE name = 'probation_records_v2'");
   const insertStmt = db.prepare(`
     INSERT INTO probation_records_v2 (
-      title, first_name, last_name, appointment_date, position, department, status, role,
+      title, first_name, last_name, appointment_date, position, department, department_unit, employment_type, status, role,
       round1_status, round1_start_date, round1_end_date,
       round2_status, round2_start_date, round2_end_date,
       chairman, committee1, committee2, committee3, committee4, secretary,
       round1_score, round2_score, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   const transaction = db.transaction(() => {
@@ -183,7 +189,7 @@ function resetProbationIds() {
     resetSeqStmt.run();
     for (const r of records as any[]) {
       insertStmt.run(
-        r.title, r.first_name, r.last_name, r.appointment_date, r.position, r.department, r.status, r.role,
+        r.title, r.first_name, r.last_name, r.appointment_date, r.position, r.department, r.department_unit, r.employment_type, r.status, r.role,
         r.round1_status, r.round1_start_date, r.round1_end_date,
         r.round2_status, r.round2_start_date, r.round2_end_date,
         r.chairman, r.committee1, r.committee2, r.committee3, r.committee4, r.secretary,
@@ -193,97 +199,6 @@ function resetProbationIds() {
   });
 
   transaction();
-}
-
-async function syncFromSheet() {
-  if (!SPREADSHEET_ID || !process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL) {
-    console.warn("Google Sheets Sync From Sheet: Missing SPREADSHEET_ID or GOOGLE_SERVICE_ACCOUNT_EMAIL");
-    return 0;
-  }
-
-  try {
-    const response = await sheets.spreadsheets.values.get({
-      spreadsheetId: SPREADSHEET_ID,
-      range: `${SHEET_NAME}!A2:W`, // Fetch up to column W (created_at)
-    });
-
-    const rows = response.data.values || [];
-    if (rows.length === 0) return 0;
-
-    const insertOrUpdate = db.prepare(`
-      INSERT INTO probation_records_v2 (
-        id, title, first_name, last_name, position, appointment_date,
-        round1_status, round1_start_date, round1_end_date, round1_score,
-        round2_status, round2_start_date, round2_end_date, round2_score,
-        chairman, committee1, committee2, committee3, committee4, secretary,
-        department, status, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(id) DO UPDATE SET
-        title=excluded.title, 
-        first_name=excluded.first_name, 
-        last_name=excluded.last_name,
-        position=excluded.position, 
-        appointment_date=excluded.appointment_date,
-        round1_status=excluded.round1_status, 
-        round1_start_date=excluded.round1_start_date,
-        round1_end_date=excluded.round1_end_date, 
-        round1_score=excluded.round1_score,
-        round2_status=excluded.round2_status, 
-        round2_start_date=excluded.round2_start_date,
-        round2_end_date=excluded.round2_end_date, 
-        round2_score=excluded.round2_score,
-        chairman=excluded.chairman, 
-        committee1=excluded.committee1, 
-        committee2=excluded.committee2,
-        committee3=excluded.committee3, 
-        committee4=excluded.committee4, 
-        secretary=excluded.secretary,
-        department=excluded.department, 
-        status=excluded.status, 
-        created_at=excluded.created_at
-    `);
-
-    const transaction = db.transaction((dataRows) => {
-      for (const row of dataRows) {
-        if (!row[0]) continue;
-        // Ensure we have enough columns or default them
-        const values = Array(23).fill(null);
-        row.forEach((val, i) => values[i] = val);
-        
-        insertOrUpdate.run(
-          values[0], // id
-          values[1], // title
-          values[2], // first_name
-          values[3], // last_name
-          values[4], // position
-          values[6], // appointment_date
-          values[7], // round1_status
-          values[8], // round1_start_date
-          values[9], // round1_end_date
-          values[19], // round1_score
-          values[10], // round2_status
-          values[11], // round2_start_date
-          values[12], // round2_end_date
-          values[20], // round2_score
-          values[13], // chairman
-          values[14], // committee1
-          values[15], // committee2
-          values[16], // committee3
-          values[17], // committee4
-          values[18], // secretary
-          values[5], // department
-          values[21], // status
-          values[22] || new Date().toISOString() // created_at
-        );
-      }
-    });
-
-    transaction(rows);
-    return rows.length;
-  } catch (error) {
-    console.error("Error syncing from Google Sheets:", error);
-    throw error;
-  }
 }
 
 // Initialize Database
@@ -302,6 +217,9 @@ db.exec(`
     last_name TEXT,
     appointment_date TEXT,
     position TEXT,
+    employment_type TEXT,
+    department TEXT,
+    department_unit TEXT,
     round1_status TEXT,
     round1_start_date TEXT,
     round1_end_date TEXT,
@@ -316,7 +234,6 @@ db.exec(`
     secretary TEXT,
     round1_score TEXT,
     round2_score TEXT,
-    department TEXT,
     status TEXT,
     role TEXT DEFAULT 'User',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -344,6 +261,12 @@ try {
 } catch (e) {}
 try {
   db.prepare("ALTER TABLE probation_records_v2 ADD COLUMN role TEXT DEFAULT 'User'").run();
+} catch (e) {}
+try {
+  db.prepare("ALTER TABLE probation_records_v2 ADD COLUMN employment_type TEXT").run();
+} catch (e) {}
+try {
+  db.prepare("ALTER TABLE probation_records_v2 ADD COLUMN department_unit TEXT").run();
 } catch (e) {}
 
 async function startServer() {
@@ -388,7 +311,7 @@ async function startServer() {
 
   app.post("/api/records", async (req, res) => {
     const {
-      title, first_name, last_name, appointment_date, position, department, status, role,
+      title, first_name, last_name, appointment_date, position, department, department_unit, employment_type, status, role,
       round1_status, round1_start_date, round1_end_date,
       round2_status, round2_start_date, round2_end_date,
       chairman, committee1, committee2, committee3, committee4, secretary,
@@ -398,14 +321,14 @@ async function startServer() {
     try {
       const info = db.prepare(`
         INSERT INTO probation_records_v2 (
-          title, first_name, last_name, appointment_date, position, department, status, role,
+          title, first_name, last_name, appointment_date, position, department, department_unit, employment_type, status, role,
           round1_status, round1_start_date, round1_end_date,
           round2_status, round2_start_date, round2_end_date,
           chairman, committee1, committee2, committee3, committee4, secretary,
           round1_score, round2_score
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
-        title, first_name, last_name, appointment_date, position, department, status, role || 'User',
+        title, first_name, last_name, appointment_date, position, department, department_unit, employment_type, status, role || 'User',
         round1_status, round1_start_date, round1_end_date,
         round2_status, round2_start_date, round2_end_date,
         chairman, committee1, committee2, committee3, committee4, secretary,
@@ -414,7 +337,7 @@ async function startServer() {
       
       const newRecord = {
         id: info.lastInsertRowid,
-        title, first_name, last_name, appointment_date, position, department, status, role,
+        title, first_name, last_name, appointment_date, position, department, department_unit, employment_type, status, role,
         round1_status, round1_start_date, round1_end_date,
         round2_status, round2_start_date, round2_end_date,
         chairman, committee1, committee2, committee3, committee4, secretary,
@@ -435,7 +358,7 @@ async function startServer() {
   app.put("/api/records/:id", async (req, res) => {
     const { id } = req.params;
     const {
-      title, first_name, last_name, appointment_date, position, department, status, role,
+      title, first_name, last_name, appointment_date, position, department, department_unit, employment_type, status, role,
       round1_status, round1_start_date, round1_end_date,
       round2_status, round2_start_date, round2_end_date,
       chairman, committee1, committee2, committee3, committee4, secretary,
@@ -445,14 +368,14 @@ async function startServer() {
     try {
       db.prepare(`
         UPDATE probation_records_v2 SET
-          title = ?, first_name = ?, last_name = ?, appointment_date = ?, position = ?, department = ?, status = ?, role = ?,
+          title = ?, first_name = ?, last_name = ?, appointment_date = ?, position = ?, department = ?, department_unit = ?, employment_type = ?, status = ?, role = ?,
           round1_status = ?, round1_start_date = ?, round1_end_date = ?,
           round2_status = ?, round2_start_date = ?, round2_end_date = ?,
           chairman = ?, committee1 = ?, committee2 = ?, committee3 = ?, committee4 = ?, secretary = ?,
           round1_score = ?, round2_score = ?
         WHERE id = ?
       `).run(
-        title, first_name, last_name, appointment_date, position, department, status, role || 'User',
+        title, first_name, last_name, appointment_date, position, department, department_unit, employment_type, status, role || 'User',
         round1_status, round1_start_date, round1_end_date,
         round2_status, round2_start_date, round2_end_date,
         chairman, committee1, committee2, committee3, committee4, secretary,
@@ -462,14 +385,14 @@ async function startServer() {
       
       // Sync to Google Sheets in background
       syncToSheet({
-        id, title, first_name, last_name, appointment_date, position, department, status, role,
+        id, title, first_name, last_name, appointment_date, position, department, department_unit, employment_type, status, role,
         round1_status, round1_start_date, round1_end_date,
         round2_status, round2_start_date, round2_end_date,
         chairman, committee1, committee2, committee3, committee4, secretary,
         round1_score, round2_score
       });
       syncToWebApp({
-        id, title, first_name, last_name, appointment_date, position, department, status, role,
+        id, title, first_name, last_name, appointment_date, position, department, department_unit, employment_type, status, role,
         round1_status, round1_start_date, round1_end_date,
         round2_status, round2_start_date, round2_end_date,
         chairman, committee1, committee2, committee3, committee4, secretary,
@@ -500,7 +423,7 @@ async function startServer() {
       
       // 2. Update headers and clear existing data
       const headers = [
-        "ID", "คำนำหน้า", "ชื่อ", "นามสกุล", "ตำแหน่ง", "สังกัดงาน", "วันที่บรรจุ", 
+        "ID", "คำนำหน้า", "ชื่อ", "นามสกุล", "ตำแหน่ง", "ประเภทการจ้าง", "สังกัดงาน", "สังกัดหน่วย", "วันที่บรรจุ", 
         "รอบที่ 1 สถานะ", "รอบที่ 1 เริ่ม", "รอบที่ 1 ถึง",
         "รอบที่ 2 สถานะ", "รอบที่ 2 เริ่ม", "รอบที่ 2 ถึง",
         "ประธาน", "กรรมการ 1", "กรรมการ 2", "กรรมการ 3", "กรรมการ 4", "เลขานุการ",
@@ -533,7 +456,9 @@ async function startServer() {
           record.first_name,
           record.last_name,
           record.position,
+          record.employment_type,
           record.department,
+          record.department_unit,
           record.appointment_date,
           record.round1_status,
           record.round1_start_date,
@@ -594,8 +519,94 @@ async function startServer() {
 
   app.post("/api/sync-from-sheet", async (req, res) => {
     try {
-      const count = await syncFromSheet();
-      res.json({ success: true, count });
+      if (!SPREADSHEET_ID || !process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL) {
+        return res.status(400).json({ error: "Google Sheets integration not configured" });
+      }
+
+      const response = await sheets.spreadsheets.values.get({
+        spreadsheetId: SPREADSHEET_ID,
+        range: `${SHEET_NAME}!A2:Y`, // Fetch up to column Y (25 columns)
+      });
+
+      const rows = response.data.values || [];
+      if (rows.length === 0) {
+        return res.json({ success: true, count: 0 });
+      }
+
+      const insertOrUpdate = db.prepare(`
+        INSERT INTO probation_records_v2 (
+          id, title, first_name, last_name, position, employment_type, department, department_unit, appointment_date,
+          round1_status, round1_start_date, round1_end_date, round1_score,
+          round2_status, round2_start_date, round2_end_date, round2_score,
+          chairman, committee1, committee2, committee3, committee4, secretary,
+          status, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          title=excluded.title, 
+          first_name=excluded.first_name, 
+          last_name=excluded.last_name,
+          position=excluded.position, 
+          employment_type=excluded.employment_type,
+          department=excluded.department,
+          department_unit=excluded.department_unit,
+          appointment_date=excluded.appointment_date,
+          round1_status=excluded.round1_status, 
+          round1_start_date=excluded.round1_start_date,
+          round1_end_date=excluded.round1_end_date, 
+          round1_score=excluded.round1_score,
+          round2_status=excluded.round2_status, 
+          round2_start_date=excluded.round2_start_date,
+          round2_end_date=excluded.round2_end_date, 
+          round2_score=excluded.round2_score,
+          chairman=excluded.chairman, 
+          committee1=excluded.committee1, 
+          committee2=excluded.committee2,
+          committee3=excluded.committee3, 
+          committee4=excluded.committee4, 
+          secretary=excluded.secretary,
+          status=excluded.status, 
+          created_at=excluded.created_at
+      `);
+
+      const transaction = db.transaction((dataRows) => {
+        for (const row of dataRows) {
+          if (!row[0]) continue;
+          // Ensure we have enough columns or default them (25 columns total)
+          const values = Array(25).fill(null);
+          row.forEach((val, i) => values[i] = val);
+          
+          insertOrUpdate.run(
+            values[0], // id (A)
+            values[1], // title (B)
+            values[2], // first_name (C)
+            values[3], // last_name (D)
+            values[4], // position (E)
+            values[5], // employment_type (F)
+            values[6], // department (G)
+            values[7], // department_unit (H)
+            values[8], // appointment_date (I)
+            values[9], // round1_status (J)
+            values[10], // round1_start_date (K)
+            values[11], // round1_end_date (L)
+            values[21], // round1_score (V)
+            values[12], // round2_status (M)
+            values[13], // round2_start_date (N)
+            values[14], // round2_end_date (O)
+            values[22], // round2_score (W)
+            values[15], // chairman (P)
+            values[16], // committee1 (Q)
+            values[17], // committee2 (R)
+            values[18], // committee3 (S)
+            values[19], // committee4 (T)
+            values[20], // secretary (U)
+            values[23], // status (X)
+            values[24] || new Date().toISOString() // created_at (Y)
+          );
+        }
+      });
+
+      transaction(rows);
+      res.json({ success: true, count: rows.length });
     } catch (error: any) {
       console.error("Sync from sheet error:", error);
       let errorMessage = "Failed to sync from sheet";

@@ -327,8 +327,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       
       if (roundFilter === "all") return true;
       if (roundFilter === "round1") return r.round1_status === "รอดำเนินการ";
-      if (roundFilter === "round2") return r.round2_status === "รอดำเนินการ" && r.round1_status === "เรียบร้อยแล้ว";
-      if (roundFilter === "completed") return r.round1_status === "เรียบร้อยแล้ว" && r.round2_status === "เรียบร้อยแล้ว";
+      if (roundFilter === "round2") return r.round2_status === "รอดำเนินการ" && r.round1_status !== "รอดำเนินการ";
+      if (roundFilter === "completed") return r.round1_status !== "รอดำเนินการ" && r.round2_status !== "รอดำเนินการ";
       
       return true;
     });

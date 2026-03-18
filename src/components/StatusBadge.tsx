@@ -31,6 +31,7 @@ const StatusBadge: React.FC<StatusBadgeProps> = ({ status, startDate, endDate, s
       <div className={cn(
         "px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider inline-flex items-center gap-1",
         status === "รอดำเนินการ" && "bg-[#F3F4F6] text-[#6B7280]",
+        status === "ดำเนินการแล้ว" && "bg-cyan-50 text-cyan-600 border border-cyan-100",
         status === "ส่งหน้างานแล้ว" && "bg-blue-50 text-blue-600 border border-blue-100",
         status === "ส่งมหาลัยแล้ว" && "bg-purple-50 text-purple-600 border border-purple-100",
         status === "ผ่านการประเมิน" && "bg-emerald-50 text-emerald-600 border border-emerald-100",
